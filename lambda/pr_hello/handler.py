@@ -28,20 +28,31 @@ def lambda_handler(event, context):
         return response(200, {"ok": True})
 
     payload = json.loads(raw_body.decode() or "{}")
-    if event_name != "pull_request" or payload.get("action") != "opened":
+    action = payload.get("action")
+    if event_name != "pull_request" or action not in {"opened", "synchronize"}:
         return response(200, {"ignored": True})
 
     installation_id = payload["installation"]["id"]
     repo = payload["repository"]["full_name"]
     number = payload["pull_request"]["number"]
     token = installation_token(installation_id)
+    if action == "opened":
+        github_request(
+            "POST",
+            f"https://api.github.com/repos/{repo}/pulls/{number}/reviews",
+            token,
+            {"body": "hello", "event": "COMMENT"},
+        )
+        return response(200, {"reviewed": True})
+
+    sha = payload["pull_request"]["head"]["sha"]
     github_request(
         "POST",
-        f"https://api.github.com/repos/{repo}/pulls/{number}/reviews",
+        f"https://api.github.com/repos/{repo}/check-runs",
         token,
-        {"body": "hello", "event": "COMMENT"},
+        {"name": "cath-test-app", "head_sha": sha, "status": "completed", "conclusion": "success"},
     )
-    return response(200, {"reviewed": True})
+    return response(200, {"checked": True})
 
 
 def verify_signature(raw_body, signature):
